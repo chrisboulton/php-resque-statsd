@@ -13,7 +13,7 @@ with [php-resque-scheduler](http://github.com/chrisboulton/php-resque-scheduler)
 The appropriate listeners to track scheduled jobs are automatically registered,
 so no extra work is required on your behalf.
 
-## Using Loading php-resque-statsd
+## Using php-resque-statsd
 
 php-resque-statsd exists as a single class (`lib/ResqueStatsd.php`), which has
 no additional dependencies beyond php-resque itself.

@@ -15,18 +15,18 @@ so no extra work is required on your behalf.
 
 ## Using php-resque-statsd
 
-php-resque-statsd exists as a single class (`lib/ResqueStatsd.php`), which has
+php-resque-statsd exists as a single class (`lib/ResqueStatsD.php`), which has
 no additional dependencies beyond php-resque itself.
 
 To start tracking your jobs with StatsD, all you need to do is include
-`ResqueStatsd.php` in your project.
+`ResqueStatsD.php` in your project.
 
 If you're starting php-resque with the resque.php script supplied with
 php-resque, all that is
 required is a modification to the bootstrap file you supply to php-resque via
 the `APP_INCLUDE` environment variable:
 
-	require_once '/path/to/ResqueStatsd.php';
+	require_once '/path/to/ResqueStatsD.php';
 
 ### StatsD Connection Details
 
@@ -47,8 +47,8 @@ php-resque-statsd where StatsD is located:
 	$host = '127.0.0.1';
 	$port = 8579;
 
-	require_once '/path/to/ResqueStatsd.php';
-	Resque_Statsd::setServer($host, $port);
+	require_once '/path/to/ResqueStatsD.php';
+	ResqueStatsd::setHost($host, $port);
 
 
 ## Metrics
@@ -57,7 +57,7 @@ php-resque-statsd prefixes all metrics it generates with `resque`. You can
 override this behavior if desired:
 
 	require_once '/path/to/ResqueStatsd.php';
-	Resque_Statsd::setPrefix('resque.production');
+	ResqueStatsd::setPrefix('resque.production');
 
 ### Queue Based Metrics
 

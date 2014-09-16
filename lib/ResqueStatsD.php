@@ -108,9 +108,11 @@ class ResqueStatsd
     {
         $job->statsDStartTime = microtime(true);
 
-        $queuedTime = round(microtime(true) - $job->payload['queue_time']) * 1000;
-        self::sendMetric(self::STATSD_TIMER, 'queue.' . $job->queue . '.queued', $queuedTime);
-        self::sendMetric(self::STATSD_TIMER, 'job.' . $job->payload['class'] . '.queued', $queuedTime);
+        if (isset($job->payload['queue_time'])) {
+            $queuedTime = round(microtime(true) - $job->payload['queue_time']) * 1000;
+            self::sendMetric(self::STATSD_TIMER, 'queue.' . $job->queue . '.time_in_queue', $queuedTime);
+            self::sendMetric(self::STATSD_TIMER, 'job.' . $job->payload['class'] . '.time_in_queue', $queuedTime);
+        }
     }
 
     /**

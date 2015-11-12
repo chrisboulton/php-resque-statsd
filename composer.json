@@ -9,5 +9,10 @@
             "email": "chris@bigcommerce.com"
         }
     ],
-    "require": {}
+    "require": {},
+	"autoload": {
+		"psr-0": {
+			"ResqueStatsD": "lib"
+		}
+	}
 }

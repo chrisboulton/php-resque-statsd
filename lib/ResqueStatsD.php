@@ -7,7 +7,7 @@
  * @copyright	(c) 2012 Chris Boulton
  * @license		http://www.opensource.org/licenses/mit-license.php
  */
-class ResqueStatsd
+class ResqueStatsD
 {
     const STATSD_TIMER   = 'ms';
     const STATSD_COUNTER = 'c';

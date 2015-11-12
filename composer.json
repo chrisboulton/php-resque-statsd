@@ -1,0 +1,13 @@
+{
+    "name": "skillshare/php-resque-statsd",
+    "description": "Submit metrics for your php-resque jobs into StatsD/Graphite",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Chris Boulton",
+            "email": "chris@bigcommerce.com"
+        }
+    ],
+    "require": {}
+}

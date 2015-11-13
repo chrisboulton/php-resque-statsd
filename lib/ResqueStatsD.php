@@ -209,8 +209,3 @@ class ResqueStatsD
         return true;
     }
 }
-
-// Automatically register if Resque is available
-if (class_exists('Resque') && !defined('RESQUESTATSD_DONT_REGISTER')) {
-    ResqueStatsD::register();
-}

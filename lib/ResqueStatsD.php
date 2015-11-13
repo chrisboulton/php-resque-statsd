@@ -77,8 +77,7 @@ class ResqueStatsD
      */
     public static function afterEnqueue($class, $args, $queue)
     {
-        self::sendMetric(self::STATSD_COUNTER, 'queue.' . $queue . '.enqueued', 1);
-        self::sendMetric(self::STATSD_COUNTER, 'job.' . $class . '.enqueued', 1);
+        self::sendMetric(self::STATSD_COUNTER, 'job.enqueued', 1, compact('class', 'queue'));
     }
 
     /**
@@ -91,8 +90,7 @@ class ResqueStatsD
      */
     public static function afterSchedule($at, $queue, $class, $args)
     {
-        self::sendMetric(self::STATSD_COUNTER, 'queue.' . $queue . '.scheduled', 1);
-        self::sendMetric(self::STATSD_COUNTER, 'job.' . $class . '.scheduled', 1);
+        self::sendMetric(self::STATSD_COUNTER, 'job.scheduled', 1, compact('class', 'queue'));
     }
 
     /**
@@ -106,12 +104,15 @@ class ResqueStatsD
      */
     public static function beforeFork(Resque_Job $job)
     {
-        $job->statsDStartTime = microtime(true);
+        $now = microtime(true);
+        $job->statsDStartTime = $now;
 
         if (isset($job->payload['queue_time'])) {
-            $queuedTime = round(microtime(true) - $job->payload['queue_time']) * 1000;
-            self::sendMetric(self::STATSD_TIMER, 'queue.' . $job->queue . '.time_in_queue', $queuedTime);
-            self::sendMetric(self::STATSD_TIMER, 'job.' . $job->payload['class'] . '.time_in_queue', $queuedTime);
+            $queuedTime = round($now - $job->payload['queue_time']) * 1000;
+            self::sendMetric(self::STATSD_TIMER, 'job.time_in_queue', $queuedTime, [
+                'class' => $job->payload['class'],
+                'queue' => $job->queue
+            ]);
         }
     }
 
@@ -122,12 +123,16 @@ class ResqueStatsD
      */
     public static function afterPerform(Resque_Job $job)
     {
-        self::sendMetric(self::STATSD_COUNTER, 'queue.' . $job->queue . '.finished', 1);
-        self::sendMetric(self::STATSD_COUNTER, 'job.' . $job->payload['class'] . '.finished', 1);
-
         $executionTime = round(microtime(true) - $job->statsDStartTime) * 1000;
-        self::sendMetric(self::STATSD_TIMER, 'queue.' . $job->queue . '.processed', $executionTime);
-        self::sendMetric(self::STATSD_TIMER, 'job.' . $job->payload['class'] . '.processed', $executionTime);
+
+        self::sendMetric(self::STATSD_COUNTER, 'job.finished', 1, [
+            'class' => $job->payload['class'],
+            'queue' => $job->queue
+        ]);
+        self::sendMetric(self::STATSD_TIMER, 'job.processed', $executionTime, [
+            'class' => $job->payload['class'],
+            'queue' => $job->queue
+        ]);
     }
 
     /**
@@ -138,8 +143,10 @@ class ResqueStatsD
      */
     public static function onFailure(Exception $e, Resque_Job $job)
     {
-        self::sendMetric(self::STATSD_COUNTER, 'queue.' . $job->queue . '.failed', 1);
-        self::sendMetric(self::STATSD_COUNTER, 'job.' . $job->payload['class'] . '.failed', 1);
+        self::sendMetric(self::STATSD_COUNTER, 'job.failed', 1, [
+            'class' => $job->payload['class'],
+            'queue' => $job->queue
+        ]);
     }
 
     /**
@@ -187,7 +194,7 @@ class ResqueStatsD
      *
      * @return boolean True if the metric was submitted successfully.
      */
-    private static function sendMetric($type, $name, $value)
+    private static function sendMetric($type, $name, $value, $tags = [])
     {
         list($host, $port) = self::getStatsDHost();
 
@@ -200,12 +207,31 @@ class ResqueStatsD
             return false;
         }
 
-        $metric = self::$prefix . '.' . $name . ':' . $value . '|' . $type;
+        $joinedTags = self::joinTags($tags);
+        $metric = self::$prefix . '.' . $name . ':' . $value . '|' . $type . $joinedTags;
+
         if (!fwrite($fp, $metric)) {
             return false;
         }
 
         fclose($fp);
         return true;
+    }
+
+
+    private static function joinTags($tags) {
+        if (empty($tags)) {
+            return '';
+        }
+
+        $joinedTags = [];
+        foreach ($tags as $tag => $value) {
+            if ($value === null) {
+                $joinedTags[] = $tag;
+            } else {
+                $joinedTags[] = "$tag:$value";
+            }
+        }
+        return '|#' . implode(',', $joinedTags);
     }
 }

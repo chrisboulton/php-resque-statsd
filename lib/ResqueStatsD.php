@@ -77,6 +77,7 @@ class ResqueStatsD
      */
     public static function afterEnqueue($class, $args, $queue)
     {
+        $class = self::getJobClass($class, $args);
         self::sendMetric(self::STATSD_COUNTER, 'job.enqueued', 1, compact('class', 'queue'));
     }
 
@@ -90,6 +91,7 @@ class ResqueStatsD
      */
     public static function afterSchedule($at, $queue, $class, $args)
     {
+        $class = self::getJobClass($class, $args);
         self::sendMetric(self::STATSD_COUNTER, 'job.scheduled', 1, compact('class', 'queue'));
     }
 
@@ -109,8 +111,10 @@ class ResqueStatsD
 
         if (isset($job->payload['queue_time'])) {
             $queuedTime = round($now - $job->payload['queue_time']) * 1000;
+            $class = self::getJobClass($job);
+
             self::sendMetric(self::STATSD_TIMER, 'job.time_in_queue', $queuedTime, [
-                'class' => $job->payload['class'],
+                'class' => $class,
                 'queue' => $job->queue
             ]);
         }
@@ -124,13 +128,14 @@ class ResqueStatsD
     public static function afterPerform(Resque_Job $job)
     {
         $executionTime = round(microtime(true) - $job->statsDStartTime) * 1000;
+        $class = self::getJobClass($job);
 
         self::sendMetric(self::STATSD_COUNTER, 'job.finished', 1, [
-            'class' => $job->payload['class'],
+            'class' => $class,
             'queue' => $job->queue
         ]);
         self::sendMetric(self::STATSD_TIMER, 'job.processed', $executionTime, [
-            'class' => $job->payload['class'],
+            'class' => $class,
             'queue' => $job->queue
         ]);
     }
@@ -143,8 +148,10 @@ class ResqueStatsD
      */
     public static function onFailure(Exception $e, Resque_Job $job)
     {
+        $class = self::getJobClass($job);
+
         self::sendMetric(self::STATSD_COUNTER, 'job.failed', 1, [
-            'class' => $job->payload['class'],
+            'class' => $class,
             'queue' => $job->queue
         ]);
     }
@@ -233,5 +240,21 @@ class ResqueStatsD
             }
         }
         return '|#' . implode(',', $joinedTags);
+    }
+
+    private static function getJobClass($jobOrClass, $args = null) {
+        $className = '';
+        if ($args) {
+            $className = $jobOrClass;
+        } else {
+            $args = $jobOrClass->payload['args'];
+            $className = $jobOrClass->payload['class'];
+        }
+
+        if ($className === 'Job' && isset($args['callable'])) {
+            $className = "{$args['callable'][0]}::{$args['callable'][1]}";
+        }
+
+        return $className;
     }
 }

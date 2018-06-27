@@ -174,15 +174,19 @@ class ResqueStatsD
         $host = self::$host;
         $port = self::$port;
 
-        if (!empty($_ENV['STATSD_HOST'])) {
-            $host = $_ENV['STATSD_HOST'];
+        $statsd_host = getenv('STATSD_HOST');
+        $statsd_port = getenv('STATSD_PORT');
+        $graphite_host = getenv('GRAPHITE_HOST');
+
+        if (!empty($statsd_host)) {
+            $host = $statsd_host;
         }
-        else if(!empty($_ENV['GRAPHITE_HOST'])) {
-            $host = $_ENV['GRAPHITE_HOST'];
+        else if(!empty($graphite_host)) {
+            $host = $graphite_host;
         }
 
-        if (!empty($_ENV['STATSD_PORT'])) {
-            $port = $_ENV['STATSD_PORT'];
+        if (!empty($statsd_port)) {
+            $port = $statsd_port;
         }
 
         if (substr_count($host, ':') == 1) {

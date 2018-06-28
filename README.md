@@ -10,8 +10,6 @@ track how much time php-resque workers spend working.
 
 php-resque-statsd also includes support for tracking metrics for jobs scheduled
 with [php-resque-scheduler](http://github.com/chrisboulton/php-resque-scheduler).
-The appropriate listeners to track scheduled jobs are automatically registered,
-so no extra work is required on your behalf.
 
 ## Using php-resque-statsd
 
@@ -19,7 +17,7 @@ php-resque-statsd exists as a single class (`lib/ResqueStatsD.php`), which has
 no additional dependencies beyond php-resque itself.
 
 To start tracking your jobs with StatsD, all you need to do is include
-`ResqueStatsD.php` in your project.
+`ResqueStatsD.php` in your project, and call `ResqueStatsD::register()`.
 
 If you're starting php-resque with the resque.php script supplied with
 php-resque, all that is

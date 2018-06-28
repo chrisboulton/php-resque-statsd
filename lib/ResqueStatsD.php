@@ -7,7 +7,7 @@
  * @copyright	(c) 2012 Chris Boulton
  * @license		http://www.opensource.org/licenses/mit-license.php
  */
-class ResqueStatsd
+class ResqueStatsD
 {
     const STATSD_TIMER   = 'ms';
     const STATSD_COUNTER = 'c';
@@ -77,8 +77,8 @@ class ResqueStatsd
      */
     public static function afterEnqueue($class, $args, $queue)
     {
-        self::sendMetric(self::STATSD_COUNTER, 'queue.' . $queue . '.enqueued', 1);
-        self::sendMetric(self::STATSD_COUNTER, 'job.' . $class . '.enqueued', 1);
+        $class = self::getJobClass($class, $args);
+        self::sendMetric(self::STATSD_COUNTER, 'job.enqueued', 1, compact('class', 'queue'));
     }
 
     /**
@@ -91,8 +91,8 @@ class ResqueStatsd
      */
     public static function afterSchedule($at, $queue, $class, $args)
     {
-        self::sendMetric(self::STATSD_COUNTER, 'queue.' . $queue . '.scheduled', 1);
-        self::sendMetric(self::STATSD_COUNTER, 'job.' . $class . '.scheduled', 1);
+        $class = self::getJobClass($class, $args);
+        self::sendMetric(self::STATSD_COUNTER, 'job.scheduled', 1, compact('class', 'queue'));
     }
 
     /**
@@ -106,12 +106,17 @@ class ResqueStatsd
      */
     public static function beforeFork(Resque_Job $job)
     {
-        $job->statsDStartTime = microtime(true);
+        $now = microtime(true);
+        $job->statsDStartTime = $now;
 
         if (isset($job->payload['queue_time'])) {
-            $queuedTime = round(microtime(true) - $job->payload['queue_time']) * 1000;
-            self::sendMetric(self::STATSD_TIMER, 'queue.' . $job->queue . '.time_in_queue', $queuedTime);
-            self::sendMetric(self::STATSD_TIMER, 'job.' . $job->payload['class'] . '.time_in_queue', $queuedTime);
+            $queuedTime = round($now - $job->payload['queue_time']) * 1000;
+            $class = self::getJobClass($job);
+
+            self::sendMetric(self::STATSD_TIMER, 'job.time_in_queue', $queuedTime, [
+                'class' => $class,
+                'queue' => $job->queue
+            ]);
         }
     }
 
@@ -122,12 +127,17 @@ class ResqueStatsd
      */
     public static function afterPerform(Resque_Job $job)
     {
-        self::sendMetric(self::STATSD_COUNTER, 'queue.' . $job->queue . '.finished', 1);
-        self::sendMetric(self::STATSD_COUNTER, 'job.' . $job->payload['class'] . '.finished', 1);
-
         $executionTime = round(microtime(true) - $job->statsDStartTime) * 1000;
-        self::sendMetric(self::STATSD_TIMER, 'queue.' . $job->queue . '.processed', $executionTime);
-        self::sendMetric(self::STATSD_TIMER, 'job.' . $job->payload['class'] . '.processed', $executionTime);
+        $class = self::getJobClass($job);
+
+        self::sendMetric(self::STATSD_COUNTER, 'job.finished', 1, [
+            'class' => $class,
+            'queue' => $job->queue
+        ]);
+        self::sendMetric(self::STATSD_TIMER, 'job.processed', $executionTime, [
+            'class' => $class,
+            'queue' => $job->queue
+        ]);
     }
 
     /**
@@ -138,8 +148,12 @@ class ResqueStatsd
      */
     public static function onFailure(Exception $e, Resque_Job $job)
     {
-        self::sendMetric(self::STATSD_COUNTER, 'queue.' . $job->queue . '.failed', 1);
-        self::sendMetric(self::STATSD_COUNTER, 'job.' . $job->payload['class'] . '.failed', 1);
+        $class = self::getJobClass($job);
+
+        self::sendMetric(self::STATSD_COUNTER, 'job.failed', 1, [
+            'class' => $class,
+            'queue' => $job->queue
+        ]);
     }
 
     /**
@@ -160,15 +174,19 @@ class ResqueStatsd
         $host = self::$host;
         $port = self::$port;
 
-        if (!empty($_ENV['STATSD_HOST'])) {
-            $host = $_ENV['STATSD_HOST'];
+        $statsd_host = getenv('STATSD_HOST');
+        $statsd_port = getenv('STATSD_PORT');
+        $graphite_host = getenv('GRAPHITE_HOST');
+
+        if (!empty($statsd_host)) {
+            $host = $statsd_host;
         }
-        else if(!empty($_ENV['GRAPHITE_HOST'])) {
-            $host = $_ENV['GRAPHITE_HOST'];
+        else if(!empty($graphite_host)) {
+            $host = $graphite_host;
         }
 
-        if (!empty($_ENV['STATSD_PORT'])) {
-            $port = $_ENV['STATSD_PORT'];
+        if (!empty($statsd_port)) {
+            $port = $statsd_port;
         }
 
         if (substr_count($host, ':') == 1) {
@@ -187,7 +205,7 @@ class ResqueStatsd
      *
      * @return boolean True if the metric was submitted successfully.
      */
-    private static function sendMetric($type, $name, $value)
+    private static function sendMetric($type, $name, $value, $tags = [])
     {
         list($host, $port) = self::getStatsDHost();
 
@@ -200,7 +218,9 @@ class ResqueStatsd
             return false;
         }
 
-        $metric = self::$prefix . '.' . $name . ':' . $value . '|' . $type;
+        $joinedTags = self::joinTags($tags);
+        $metric = self::$prefix . '.' . $name . ':' . $value . '|' . $type . $joinedTags;
+
         if (!fwrite($fp, $metric)) {
             return false;
         }
@@ -208,9 +228,37 @@ class ResqueStatsd
         fclose($fp);
         return true;
     }
-}
 
-// Automatically register if Resque is available
-if (class_exists('Resque') && !defined('RESQUESTATSD_DONT_REGISTER')) {
-    ResqueStatsD::register();
+
+    private static function joinTags($tags) {
+        if (empty($tags)) {
+            return '';
+        }
+
+        $joinedTags = [];
+        foreach ($tags as $tag => $value) {
+            if ($value === null) {
+                $joinedTags[] = $tag;
+            } else {
+                $joinedTags[] = "$tag:$value";
+            }
+        }
+        return '|#' . implode(',', $joinedTags);
+    }
+
+    private static function getJobClass($jobOrClass, $args = null) {
+        $className = '';
+        if ($args) {
+            $className = $jobOrClass;
+        } else {
+            $args = $jobOrClass->payload['args'];
+            $className = $jobOrClass->payload['class'];
+        }
+
+        if ($className === 'Job' && isset($args['callable'])) {
+            $className = "{$args['callable'][0]}::{$args['callable'][1]}";
+        }
+
+        return $className;
+    }
 }
